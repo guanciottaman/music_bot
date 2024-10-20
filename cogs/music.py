@@ -19,7 +19,13 @@ class Music(commands.Cog):
 
     def search_song_url(self, query:str) -> str:
         yt = ytmusicapi.YTMusic()
-        videoId = yt.search(query)[0]['videoId']
+        video = yt.search(query)[0]
+        if video is None:
+            return ""
+        try:
+            videoId = video['videoId']
+        except KeyError:
+            return ""
         return f'https://youtube.com/watch?v={videoId}'
 
     async def download_song(self, url:str) -> str:
@@ -43,7 +49,10 @@ class Music(commands.Cog):
     @app_commands.describe(query='Query to search on YouTube')
     async def download(self, interaction:discord.Interaction, query:str):
         await interaction.response.defer()
-        link = await self.search_song_url(query)
+        link = self.search_song_url(query)
+        if not link:
+            await interaction.followup.send(f'The song {query} does not exist on YouTube Music.')
+            return
         filename = await self.download_song(link)
         await interaction.followup.send(filename[:-4], file=discord.File(filename))
         os.remove(filename)
@@ -57,10 +66,10 @@ class Music(commands.Cog):
     async def add_to_queue(self, interaction:discord.Interaction, query:str):
         await interaction.response.defer()
         link = self.search_song_url(query)
-        filename = await self.download_song(link)
-        if not filename:
+        if not link:
             await interaction.followup.send(f'The song {query} does not exist on YouTube Music.')
             return
+        filename = await self.download_song(link)
         await interaction.followup.send(f'{filename[:-4]} now playing')
         self.queue.append(filename)
         print(self.queue)
