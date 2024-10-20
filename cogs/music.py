@@ -23,16 +23,13 @@ class Music(commands.Cog):
         return f'https://youtube.com/watch?v={videoId}'
 
     async def download_song(self, url:str) -> str:
-        try:
-            with yt_dlp.YoutubeDL({'extract_audio': True, 'format': 'bestaudio', 'outtmpl': '%(title)s.mp3'}) as video:
-                info_dict = video.extract_info(url, download=True)
-                print(info_dict)
-                video_title = info_dict['title']
-                video.download(url)
-            return f'{video_title}.mp3'
-        except KeyError:
-            return None
-
+        with yt_dlp.YoutubeDL({'extract_audio': True, 'format': 'bestaudio', 'outtmpl': '%(title)s.mp3'}) as video:
+            info_dict: dict | None = video.extract_info(url, download=True)
+            if info_dict is None:
+                return ""
+            video_title = info_dict['title']
+            video.download(url)
+        return f'{video_title}.mp3'
 
     @app_commands.command(name='search', description='Search yt link of a song')
     @app_commands.allowed_installs(guilds=False, users=True)
@@ -61,22 +58,21 @@ class Music(commands.Cog):
         await interaction.response.defer()
         link = self.search_song_url(query)
         filename = await self.download_song(link)
-        if filename is None:
+        if not filename:
             await interaction.followup.send(f'The song {query} does not exist on YouTube Music.')
             return
         await interaction.followup.send(f'{filename[:-4]} now playing')
         self.queue.append(filename)
         print(self.queue)
-        try:
-            if not self.bot.voice_clients:
-                voice_channel = interaction.user.voice.channel
-                vc = await voice_channel.connect()
-            else:
-                vc = self.bot.voice_clients[0]
-        except AttributeError:
-            await interaction.channel.send('You must join a voice channel to play the song.')
-            self.queue.clear()
-            return
+        if not self.bot.voice_clients:
+            voice_channel: discord.member.VocalGuildChannel | None = interaction.user.voice.channel
+            if voice_channel is None:
+                await interaction.channel.send('You must join a voice channel to play the song.')
+                self.queue.clear()
+                return
+            vc = await voice_channel.connect()
+        else:
+            vc = self.bot.voice_clients[0]
         if self.queue.index(filename) == 0:
             self.set_current_song_index(0)
             await self.play_song(filename, vc)
